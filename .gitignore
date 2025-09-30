@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+
+# Envs and IDE
+.venv/
+venv/
+.env
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ultralytics / runs
+runs/
+
+# Big artifacts
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.pt
+*.onnx
+*.engine
+*.bin
+*.log
+
+# Outputs
+output*.mp4
+output*.avi
+output*.mkv
+
+# Keep config and code
+!.gitignore
+!**/*.py
+!requirements.txt
+!README.md
+!static/**
+!templates/**
+!app.py
+

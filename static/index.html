@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>People Counting - Live</title>
+  <style>
+    :root { color-scheme: dark light; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background: #0e0f12; color: #e6e6e6; }
+    header { display:flex; align-items:center; justify-content:space-between; padding: 12px 16px; border-bottom: 1px solid #222; position: sticky; top: 0; background: #0e0f12; z-index: 10; }
+    h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
+    .stats { display:flex; gap: 16px; align-items:center; }
+    .pill { background:#17181d; border:1px solid #2a2d36; border-radius: 999px; padding: 8px 12px; font-size: 14px; }
+    .controls { display:flex; gap: 8px; align-items:center; }
+    button { background:#1b1f2a; border:1px solid #2a2d36; color:#e6e6e6; padding:8px 12px; border-radius:8px; cursor:pointer; }
+    button:hover { background:#232835; }
+    main { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 16px; }
+    .video-wrap { display:flex; justify-content:center; }
+    img { max-width: 100%; width: 1020px; height: auto; border-radius: 10px; border: 1px solid #222; background: #000; }
+    footer { padding: 12px 16px; border-top:1px solid #222; color:#888; font-size: 12px; }
+  </style>
+  <script>
+    let polling = null;
+    function startCountsPoll() {
+      if (polling) return;
+      const refresh = async () => {
+        try {
+          const res = await fetch('/counts', { cache: 'no-store' });
+          const j = await res.json();
+          const total = j.total ?? 0;
+          const current = j.current ?? 0;
+          const accuracy = j.accuracy ?? 0;
+          document.getElementById('total').textContent = total;
+          document.getElementById('current').textContent = current;
+          document.getElementById('accuracy').textContent = accuracy + '%';
+          appendDataPoint(current);
+        } catch (e) {
+          // ignore transient errors
+        }
+      };
+      refresh();
+      polling = setInterval(refresh, 800);
+    }
+    function stopCountsPoll() {
+      if (polling) { clearInterval(polling); polling = null; }
+    }
+    async function toggleStream(btn) {
+      const img = document.getElementById('stream');
+      const stopping = img.dataset.active === '1';
+      try {
+        const endpoint = stopping ? '/stream/stop' : '/stream/start';
+        await fetch(endpoint, { method: 'POST' });
+        if (stopping) {
+          img.dataset.active = '0';
+          btn.textContent = 'Start Stream';
+        } else {
+          img.dataset.active = '1';
+          btn.textContent = 'Stop Stream';
+          if (!img.src) img.src = '/stream';
+        }
+      } catch (e) {}
+    }
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('stream').src = '/stream';
+      document.getElementById('stream').dataset.active = '1';
+      startCountsPoll();
+    });
+  </script>
+  <script>
+    // Simple line chart without external libs
+    const chart = {
+      maxPoints: 120,
+      data: [],
+      canvas: null,
+      ctx: null,
+      init() {
+        this.canvas = document.getElementById('chart');
+        this.ctx = this.canvas.getContext('2d');
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+        this.draw();
+      },
+      resize() {
+        const wrap = document.getElementById('chart-wrap');
+        const w = Math.min(1020, wrap.clientWidth - 2);
+        this.canvas.width = w;
+        this.canvas.height = 180;
+        this.draw();
+      },
+      push(val) {
+        this.data.push(val);
+        if (this.data.length > this.maxPoints) this.data.shift();
+        this.draw();
+      },
+      draw() {
+        const c = this.ctx, w = this.canvas.width, h = this.canvas.height;
+        c.clearRect(0,0,w,h);
+        // axes
+        c.strokeStyle = '#2a2d36';
+        c.lineWidth = 1;
+        for (let i=0;i<5;i++) {
+          const y = (h-20) * (i/4) + 10;
+          c.beginPath(); c.moveTo(30, y); c.lineTo(w-10, y); c.stroke();
+        }
+        // labels
+        c.fillStyle = '#888'; c.font = '12px system-ui'; c.textBaseline = 'top';
+        c.fillText('Current Count', 10, 8);
+        // line
+        if (this.data.length < 2) return;
+        const max = Math.max(1, ...this.data);
+        const min = 0;
+        const span = Math.max(1, max - min);
+        const plotW = w - 40; const plotH = h - 30; const ox = 30; const oy = h - 10;
+        c.strokeStyle = '#4cc9f0'; c.lineWidth = 2; c.beginPath();
+        this.data.forEach((v, i) => {
+          const x = ox + (i / (this.maxPoints - 1)) * plotW;
+          const y = oy - ((v - min) / span) * plotH;
+          if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+        });
+        c.stroke();
+      }
+    };
+    function appendDataPoint(v){
+      if (!chart.ctx) chart.init();
+      chart.push(v);
+    }
+  </script>
+  </head>
+<body>
+  <header>
+    <h1>People Counting - Live</h1>
+    <div class="stats">
+      <div class="pill">Total: <strong id="total">0</strong></div>
+      <div class="pill">Current: <strong id="current">0</strong></div>
+      <div class="pill">Accuracy: <strong id="accuracy">0%</strong></div>
+      <div class="controls">
+        <button onclick="toggleStream(this)">Stop Stream</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <div class="video-wrap">
+      <img id="stream" alt="Live stream" />
+    </div>
+    <div id="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </main>
+  <footer>
+    Running local inference with YOLOv8 and overlay heatmap. Keep this tab open.
+  </footer>
+</body>
+</html>
+
+
